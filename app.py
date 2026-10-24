@@ -28,7 +28,7 @@ import streamlit as st
 
 APP_TITLE = "ATTSF · Ecodriving"
 DB_PATH = Path(os.getenv("ATTSF_DB_PATH", "ecodriving.db"))
-DEFAULT_ADMIN_PASSWORD = "cambiar-esta-clave"
+DEFAULT_ADMIN_PASSWORD = "admin-attsf"
 DEFAULT_PARAMS = {
     "idle_optimal_pct": 5.0,
     "idle_moderate_pct": 10.0,
