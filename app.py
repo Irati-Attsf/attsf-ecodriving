@@ -25,6 +25,10 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import base64
+import pandas as pd
+from github import Github
+import streamlit as st
 
 APP_TITLE = "ATTSF · Ecodriving"
 DB_PATH = Path(os.getenv("ATTSF_DB_PATH", "ecodriving.db"))
@@ -602,3 +606,29 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def guardar_excel_en_github(df, nombre_archivo="datos_ecodriving.xlsx"):
+    try:
+        token = st.secrets["GITHUB_TOKEN"]
+        g = Github(token)
+        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False)
+        contenido_bytes = buffer.getvalue()
+
+        try:
+            contents = repo.get_contents(nombre_archivo)
+            repo.update_file(
+                nombre_archivo,
+                "Guardando datos",
+                contenido_bytes,
+                contents.sha,
+            )
+        except Exception:
+            repo.create_file(nombre_archivo, "Guardando datos", contenido_bytes)
+
+        st.success("¡Datos guardados!")
+    except Exception as e:
+        st.error(f"Error: {e}")
