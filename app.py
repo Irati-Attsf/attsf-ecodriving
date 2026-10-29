@@ -510,27 +510,38 @@ def main():
             st.dataframe(monthly, use_container_width=True, hide_index=True)
 
     with ranking_tab:
-        st.subheader("Clasificación y puntos acumulados")
-        if records.empty:
-            st.info("No hay registros todavía.")
-        else:
-            summary = records.groupby("driver", as_index=False).agg(
-                puntos_acumulados=("points_total", "sum"),
-                meses_activos=("month", "nunique"),
-                km_totales=("distance_km", "sum"),
-            ).sort_values("puntos_acumulados", ascending=False)
-            if not summary.empty:
-                winner = summary.iloc[0]
-                st.success(f"🌟 Conductor/a destacado/a según puntos acumulados: **{winner['driver']}** · {winner['puntos_acumulados']:.0f} puntos")
-            st.dataframe(summary, use_container_width=True, hide_index=True)
-            monthly_driver = records.groupby(["month", "driver"], as_index=False)["points_total"].sum()
-            if not monthly_driver.empty:
-                month_options = sorted(monthly_driver["month"].unique(), reverse=True)
-                selected_month = st.selectbox("Ver clasificación del mes", month_options)
-                month_rank = monthly_driver[monthly_driver["month"] == selected_month].sort_values("points_total", ascending=False)
-                st.markdown(f"**Conductor/a del mes: {month_rank.iloc[0]['driver']}** · {month_rank.iloc[0]['points_total']:.0f} puntos")
-                st.dataframe(month_rank.rename(columns={"points_total": "Puntos del mes"}), use_container_width=True, hide_index=True)
-
+    st.subheader("🏆 Clasificación General de Conductores")
+    
+    if not records.empty:
+        # Agrupar puntos acumulados por cada conductor
+        df_ranking = records.groupby("driver", as_index=False)["points_total"].sum()
+        df_ranking = df_ranking.sort_values(by="points_total", ascending=False).reset_index(drop=True)
+        
+        for index, row in df_ranking.iterrows():
+            conductor = row["driver"]
+            puntos = row["points_total"]
+            
+            # Asignar insignias al Top 5
+            if index == 0:
+                insignia = "🥇 1º"
+            elif index == 1:
+                insignia = "🥈 2º"
+            elif index == 2:
+                insignia = "🥉 3º"
+            elif index == 3:
+                insignia = "🏅 4º"
+            elif index == 4:
+                insignia = "🏅 5º"
+            else:
+                insignia = f"{index + 1}º"
+                
+            # Mostrar en pantalla
+            if index < 5:
+                st.markdown(f"### {insignia} — **{conductor}**: {puntos:.0f} puntos")
+            else:
+                st.write(f"{insignia} — {conductor}: {puntos:.0f} puntos")
+    else:
+        st.info("Todavía no hay registros cargados para calcular la clasificación.")    
     with impact_tab:
         st.subheader("Impacto ambiental y ahorro estimado")
         if records.empty:
@@ -632,3 +643,56 @@ def guardar_excel_en_github(df, nombre_archivo="datos_ecodriving.xlsx"):
         st.success("¡Datos guardados!")
     except Exception as e:
         st.error(f"Error: {e}")
+# --- CARGAR DATOS AUTOMÁTICAMENTE DESDE GITHUB AL ARRANCAR ---
+try:
+    token = st.secrets["GITHUB_TOKEN"]
+    g = Github(token)
+    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+    file_content = repo.get_contents("datos_ecodriving.xlsx")
+    decoded_content = base64.b64decode(file_content.content)
+    df_github = pd.read_excel(io.BytesIO(decoded_content))
+    if "df_flota" not in st.session_state or st.session_state["df_flota"].empty:
+        st.session_state["df_flota"] = df_github
+except Exception:
+    pass
+  # --- SECCIÓN DE ADMINISTRADOR: BORRAR ARCHIVOS EXCEL ORDENADOS POR FECHA ---
+if st.session_state.get("admin", False):
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("⚙️ Gestión de Archivos (Admin)")
+        try:
+            token = st.secrets["GITHUB_TOKEN"]
+            g = Github(token)
+            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+            
+            # Buscar archivos .xlsx y obtener su fecha de subida
+            contents = repo.get_contents("")
+            excel_files_info = []
+            for f in contents:
+                if f.path.endswith(".xlsx"):
+                    try:
+                        commits = repo.get_commits(path=f.path)
+                        fecha = list(commits)[0].commit.author.date
+                    except Exception:
+                        fecha = ""
+                    excel_files_info.append((f.path, fecha))
+            
+            # Ordenar de más reciente a más antiguo
+            excel_files_info.sort(key=lambda x: x[1], reverse=True)
+            excel_files = [item[0] for item in excel_files_info]
+            
+            if excel_files:
+                archivo_a_borrar = st.selectbox("Elige el Excel (más reciente primero):", excel_files)
+                if st.button("🗑️ Borrar archivo elegido"):
+                    file_to_delete = repo.get_contents(archivo_a_borrar)
+                    repo.delete_file(
+                        file_to_delete.path, 
+                        f"Eliminar archivo {archivo_a_borrar} por administrador", 
+                        file_to_delete.sha
+                    )
+                    st.success(f"¡'{archivo_a_borrar}' borrado correctamente!")
+                    st.rerun()
+            else:
+                st.info("No hay archivos Excel guardados en GitHub.")
+        except Exception as e:
+            st.info("Configura GITHUB_TOKEN en los Secrets para gestionar los archivos.")
