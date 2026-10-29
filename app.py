@@ -510,7 +510,7 @@ def main():
             st.dataframe(monthly, use_container_width=True, hide_index=True)
 
     with ranking_tab:
-    st.subheader("🏆 Clasificación General de Conductores")
+      st.subheader("🏆 Clasificación General de Conductores")
     
     if not records.empty:
         # Agrupar puntos acumulados por cada conductor
@@ -541,7 +541,8 @@ def main():
             else:
                 st.write(f"{insignia} — {conductor}: {puntos:.0f} puntos")
     else:
-        st.info("Todavía no hay registros cargados para calcular la clasificación.")    
+        st.info("Todavía no hay registros cargados para calcular la clasificación.")
+      
     with impact_tab:
         st.subheader("Impacto ambiental y ahorro estimado")
         if records.empty:
