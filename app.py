@@ -29,6 +29,26 @@ import base64
 import pandas as pd
 from github import Github
 import streamlit as st
+def upload_excel_to_github(uploaded_file, file_path):
+    token = st.secrets["GITHUB_TOKEN"]
+    g = Github(token)
+    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+    file_content = uploaded_file.getvalue()
+    try:
+        contents = repo.get_contents(file_path)
+        repo.update_file(contents.path, "Actualizar archivo Excel vía Streamlit", file_content, contents.sha)
+    except:
+        repo.create_file(file_path, "Subir nuevo archivo Excel vía Streamlit", file_content)
+
+def delete_excel_from_github(file_path):
+    token = st.secrets["GITHUB_TOKEN"]
+    g = Github(token)
+    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+    try:
+        contents = repo.get_contents(file_path)
+        repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
+    except Exception as e:
+        st.error(f"Error al eliminar: {e}")
 
 APP_TITLE = "ATTSF · Ecodriving"
 DB_PATH = Path(os.getenv("ATTSF_DB_PATH", "ecodriving.db"))
