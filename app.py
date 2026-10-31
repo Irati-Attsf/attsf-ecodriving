@@ -428,9 +428,10 @@ if uploaded:
             st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
             st.rerun()
     except Exception as exc:
-            
-                    st.error(f"No se pudo leer el Excel: {exc}")
-            st.markdown("**Columnas reconocidas**")
+        st.error(f"No se pudo leer el Excel: {exc}")
+
+st.markdown("**Columnas reconocidas**")
+          
             st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
             st.caption("El programa interpreta una fila por vehículo y mes. Si un vehículo aparece en varias filas del mismo mes, consolida la última fila importada; prepara el Excel con una fila mensual por vehículo.")
         with tabs[1]:
