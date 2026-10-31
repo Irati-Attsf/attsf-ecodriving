@@ -414,19 +414,21 @@ def main():
             st.subheader("Importación mensual")
             month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
             month_key = month.strftime("%Y-%m")
-            uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
-            if uploaded:
-                try:
-                    preview = prepare_excel(uploaded, month_key)
-                    st.write("Vista previa de los datos normalizados")
-                    st.dataframe(preview, use_container_width=True)
-                    if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
-                        st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
-                    if st.button("Procesar e importar", type="primary"):
-                        store_import(preview, params)
-                        st.success(f"Importación completada: {len(preview)} vehículos/registro(s) para {month_key}.")
-                        st.rerun()
-                except Exception as exc:
+  uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
+if uploaded:
+    try:
+        upload_excel_to_github(uploaded, uploaded.name)
+        preview = prepare_excel(uploaded, month_key)
+        st.write("Vista previa de los datos normalizados")
+        st.dataframe(preview, use_container_width=True)
+        if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
+            st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
+        if st.button("Procesar e importar", type="primary"):
+            store_import(preview, params)
+            st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
+            st.rerun()
+    except Exception as exc:
+            
                     st.error(f"No se pudo leer el Excel: {exc}")
             st.markdown("**Columnas reconocidas**")
             st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
@@ -744,26 +746,4 @@ def delete_excel_from_github(file_path):
         repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
         st.success(f"¡Archivo '{file_path}' eliminado correctamente de GitHub!")
     except Exception as e:
-        st.error(f"No se pudo eliminar el archivo: {e}")
-
-# --- Apartado visual para gestionar archivos Excel en la vista de Administrador ---
-st.markdown("---")
-st.subheader("🛠️ Gestión de Archivos en GitHub (Administrador)")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("**Subir o actualizar un archivo Excel**")
-    archivo_subido_admin = st.file_uploader("Selecciona el Excel para GitHub", type=["xlsx", "xls"], key="admin_upload")
-    if archivo_subido_admin is not None:
-        if st.button("Subir archivo a GitHub", key="btn_subir_github"):
-            upload_excel_to_github(archivo_subido_admin, archivo_subido_admin.name)
-
-with col2:
-    st.markdown("**Eliminar un archivo existente**")
-    archivo_a_borrar_admin = st.text_input("Nombre exacto del archivo a borrar (ej: datos.xlsx)", key="admin_delete_input")
-    if st.button("Eliminar archivo de GitHub", key="btn_borrar_github"):
-        if archivo_a_borrar_admin:
-            delete_excel_from_github(archivo_a_borrar_admin)
-        else:
-            st.warning("Escribe el nombre del archivo que quieres eliminar.")
+        
