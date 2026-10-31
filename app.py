@@ -746,24 +746,23 @@ def delete_excel_from_github(file_path):
     except Exception as e:
         st.error(f"No se pudo eliminar el archivo: {e}")
 
-# --- Panel visual para subir y borrar archivos Excel (Solo Administradores) ---
-try:
-    es_admin = (st.session_state.get('vista') == "Administrador") or ('Administrador' in str(st.session_state))
-except:
-    es_admin = True
+# --- Panel visual para subir y borrar archivos Excel (Solo Administradores autenticados) ---
+es_admin_activo = False
+for key, value in st.session_state.items():
+    if value is True and ('admin' in key.lower() or 'pass' in key.lower() or 'correct' in key.lower()):
+        es_admin_activo = True
+        break
 
-if es_admin:
+if es_admin_activo:
     st.sidebar.markdown("---")
     st.sidebar.subheader("📁 Gestión de Datos (Excel)")
     
-    # 1. Botón para subir archivos
     uploaded_file = st.sidebar.file_uploader("Selecciona un archivo Excel", type=["xlsx", "xls"])
     if uploaded_file is not None:
         nombre_archivo = uploaded_file.name
         if st.sidebar.button("Subir archivo a GitHub"):
             upload_excel_to_github(uploaded_file, nombre_archivo)
 
-    # 2. Apartado para borrar archivos
     st.sidebar.markdown("---")
     archivo_a_borrar = st.sidebar.text_input("Nombre del archivo a eliminar (ej: datos.xlsx)")
     if st.sidebar.button("Eliminar archivo de GitHub"):
