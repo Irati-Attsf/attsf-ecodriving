@@ -414,7 +414,7 @@ def main():
             st.subheader("Importación mensual")
             month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
             month_key = month.strftime("%Y-%m")
-  uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
+            uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
 if uploaded:
     try:
         upload_excel_to_github(uploaded, uploaded.name)
