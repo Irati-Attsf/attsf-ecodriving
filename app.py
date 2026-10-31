@@ -409,6 +409,26 @@ def environmental_summary(df, p):
 
 def main():
     init_db()
+    
+    # --- AUTORRECUPERACIÓN DESDE GITHUB SI LA BD ESTÁ VACÍA ---
+    try:
+        with db_connect() as con:
+            count = con.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+        if count == 0:
+            token = st.secrets["GITHUB_TOKEN"]
+            g = Github(token)
+            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+            contents = repo.get_contents("")
+            excel_files = [f for f in contents if f.path.endswith(".xlsx")]
+            if excel_files:
+                for file_elem in excel_files:
+                    file_content = file_elem.decoded_content
+                    month_key = datetime.today().strftime("%Y-%m")
+                    preview = prepare_excel(io.BytesIO(file_content), month_key)
+                    store_import(preview, get_params())
+    except Exception:
+        pass
+
     params = get_params()
     st.title("🌱 ATTSF | Programa de Ecodriving")
     st.caption("Conducción eficiente · Reconocimiento positivo · Flota humanitaria")
