@@ -746,23 +746,24 @@ def delete_excel_from_github(file_path):
     except Exception as e:
         st.error(f"No se pudo eliminar el archivo: {e}")
 
-# --- Panel visual para subir y borrar archivos Excel ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("📁 Gestión de Datos (Excel)")
+# --- Panel visual para subir y borrar archivos Excel (Solo Administradores) ---
+# Cambia 'vista' por el nombre de la variable de tu selector de vista si es diferente
+if 'vista' in locals() and vista == "Administrador":
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📁 Gestión de Datos (Excel)")
+    
+    # 1. Botón para subir archivos
+    uploaded_file = st.sidebar.file_uploader("Selecciona un archivo Excel", type=["xlsx", "xls"])
+    if uploaded_file is not None:
+        nombre_archivo = uploaded_file.name
+        if st.sidebar.button("Subir archivo a GitHub"):
+            upload_excel_to_github(uploaded_file, nombre_archivo)
 
-# 1. Botón para subir archivos
-uploaded_file = st.sidebar.file_uploader("Selecciona un archivo Excel", type=["xlsx", "xls"])
-if uploaded_file is not None:
-    # Usamos el nombre original del archivo que sube el usuario
-    nombre_archivo = uploaded_file.name
-    if st.sidebar.button("Subir archivo a GitHub"):
-        upload_excel_to_github(uploaded_file, nombre_archivo)
-
-# 2. Apartado para borrar archivos
-st.sidebar.markdown("---")
-archivo_a_borrar = st.sidebar.text_input("Nombre del archivo a eliminar (ej: datos.xlsx)")
-if st.sidebar.button("Eliminar archivo de GitHub"):
-    if archivo_a_borrar:
-        delete_excel_from_github(archivo_a_borrar)
-    else:
-        st.sidebar.warning("Escribe el nombre exacto del archivo que quieres borrar.")
+    # 2. Apartado para borrar archivos
+    st.sidebar.markdown("---")
+    archivo_a_borrar = st.sidebar.text_input("Nombre del archivo a eliminar (ej: datos.xlsx)")
+    if st.sidebar.button("Eliminar archivo de GitHub"):
+        if archivo_a_borrar:
+            delete_excel_from_github(archivo_a_borrar)
+        else:
+            st.sidebar.warning("Escribe el nombre exacto del archivo que quieres borrar.")
