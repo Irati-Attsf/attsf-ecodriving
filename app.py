@@ -411,24 +411,50 @@ def main():
     if is_admin:
         tabs = st.tabs(["📥 Importar Excel", "👥 Conductores", "⚙️ Parámetros", "📊 Dashboard", "🌍 Impacto ambiental", "🏆 Clasificación"])
         with tabs[0]:
-            st.subheader("Importación mensual")
-            month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
-            month_key = month.strftime("%Y-%m")
-            uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
-            if uploaded:
-                try:
-                    upload_excel_to_github(uploaded, uploaded.name)
-                    preview = prepare_excel(uploaded, month_key)
-                    st.write("Vista previa de los datos normalizados")
-                    st.dataframe(preview, use_container_width=True)
-                    if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
-                        st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
-                    if st.button("Procesar e importar", type="primary"):
-                        store_import(preview, params)
-                        st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
-                        st.rerun()
-                except Exception as exc:
-                    st.error(f"No se pudo leer el Excel: {exc}")
+        st.subheader("Importación mensual y gestión de archivos")
+        month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
+        month_key = month.strftime("%Y-%m")
+        uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
+        if uploaded:
+            try:
+                upload_excel_to_github(uploaded, uploaded.name)
+                preview = prepare_excel(uploaded, month_key)
+                st.write("Vista previa de los datos normalizados")
+                st.dataframe(preview, use_container_width=True)
+                if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
+                    st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
+                if st.button("Procesar e importar", type="primary"):
+                    store_import(preview, params)
+                    st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"No se pudo leer el Excel: {exc}")
+
+        st.markdown("---")
+        st.subheader("🗑️ Gestión y eliminación de archivos guardados")
+        st.caption("Aquí puedes ver los archivos Excel almacenados en GitHub y eliminarlos si lo necesitas.")
+        
+        try:
+            token = st.secrets["GITHUB_TOKEN"]
+            g = Github(token)
+            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+            contents = repo.get_contents("")
+            excel_files = [f.path for f in contents if f.path.endswith(".xlsx")]
+            
+            if not excel_files:
+                st.info("No hay archivos Excel guardados actualmente en el repositorio.")
+            else:
+                for f_name in excel_files:
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.text(f_name)
+                    with col2:
+                        if st.button("Eliminar", key=f"del_{f_name}", type="secondary"):
+                            delete_excel_from_github(f_name)
+                            st.rerun()
+        except Exception as e:
+            st.error(f"No se pudieron cargar los archivos guardados: {e}")
+
         st.markdown("**Columnas reconocidas**")
         st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
         st.caption("El programa interpreta una fila por vehículo y mes. Si un vehículo aparece en varias filas del mismo mes, consolida la última fila importada; prepara el excel con una fila mensual por vehículo.")
