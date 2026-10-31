@@ -57,9 +57,24 @@ DEFAULT_PARAMS = {
     "simulated_idle_reduction_pct": 10.0,
 }
 
-st.set_page_config(page_title=APP_TITLE, page_icon="🌱", layout="wide")
-
-
+# --- RECUPERAR DATOS DE GITHUB AL ENCENDER ---
+if "records" not in st.session_state:
+    try:
+        import io
+        from github import Github
+        token = st.secrets["GITHUB_TOKEN"]
+        g = Github(token)
+        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+        contents = repo.get_contents("")
+        excel_files = [f for f in contents if f.path.endswith(".xlsx")]
+        if excel_files:
+            file_content = excel_files[-1].decoded_content
+            records = pd.read_excel(io.BytesIO(file_content))
+            st.session_state["records"] = records
+        else:
+            st.session_state["records"] = pd.DataFrame()
+    except Exception:
+        st.session_state["records"] = pd.DataFrame()
 def db_connect():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.execute("PRAGMA foreign_keys = ON")
