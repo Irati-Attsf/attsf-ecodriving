@@ -411,10 +411,10 @@ def main():
     if is_admin:
         tabs = st.tabs(["📥 Importar Excel", "👥 Conductores", "⚙️ Parámetros", "📊 Dashboard", "🌍 Impacto ambiental", "🏆 Clasificación"])
         with tabs[0]:
-        st.subheader("Importación mensual y gestión de archivos")
-        month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
-        month_key = month.strftime("%Y-%m")
-        uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
+            st.subheader("Importación mensual y gestión de archivos")
+            month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
+            month_key = month.strftime("%Y-%m")
+            uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
         if uploaded:
             try:
                 upload_excel_to_github(uploaded, uploaded.name)
