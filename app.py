@@ -415,25 +415,24 @@ def main():
             month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
             month_key = month.strftime("%Y-%m")
             uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
-if uploaded:
-    try:
-        upload_excel_to_github(uploaded, uploaded.name)
-        preview = prepare_excel(uploaded, month_key)
-        st.write("Vista previa de los datos normalizados")
-        st.dataframe(preview, use_container_width=True)
-        if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
-            st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
-        if st.button("Procesar e importar", type="primary"):
-            store_import(preview, params)
-            st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
-            st.rerun()
-    except Exception as exc:
-        st.error(f"No se pudo leer el Excel: {exc}")
+            if uploaded:
+        try:
+            upload_excel_to_github(uploaded, uploaded.name)
+            preview = prepare_excel(uploaded, month_key)
+            st.write("Vista previa de los datos normalizados")
+            st.dataframe(preview, use_container_width=True)
+            if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
+                st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
+            if st.button("Procesar e importar", type="primary"):
+                store_import(preview, params)
+                st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
+                st.rerun()
+        except Exception as exc:
+            st.error(f"No se pudo leer el Excel: {exc}")
 
-st.markdown("**Columnas reconocidas**")
-          
-            st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
-            st.caption("El programa interpreta una fila por vehículo y mes. Si un vehículo aparece en varias filas del mismo mes, consolida la última fila importada; prepara el Excel con una fila mensual por vehículo.")
+        st.markdown("**Columnas reconocidas**")
+        st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
+        st.caption("El programa interpreta una fila por vehículo y mes. Si un vehículo aparece en varias filas del mismo mes, consolida la última fila importada; prepara el excel con una fila mensual por vehículo.")
         with tabs[1]:
             st.subheader("Asignación de conductores")
             with db_connect() as con:
