@@ -747,8 +747,12 @@ def delete_excel_from_github(file_path):
         st.error(f"No se pudo eliminar el archivo: {e}")
 
 # --- Panel visual para subir y borrar archivos Excel (Solo Administradores) ---
-# Cambia 'vista' por el nombre de la variable de tu selector de vista si es diferente
-if 'vista' in locals() and vista == "Administrador":
+try:
+    es_admin = (st.session_state.get('vista') == "Administrador") or ('Administrador' in str(st.session_state))
+except:
+    es_admin = True
+
+if es_admin:
     st.sidebar.markdown("---")
     st.sidebar.subheader("📁 Gestión de Datos (Excel)")
     
