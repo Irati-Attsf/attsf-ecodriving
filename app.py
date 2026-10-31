@@ -712,3 +712,36 @@ if st.session_state.get("admin", False):
                 st.info("No hay archivos Excel guardados en GitHub.")
         except Exception as e:
             st.info("Configura GITHUB_TOKEN en los Secrets para gestionar los archivos.")
+import streamlit as st
+from github import Github
+import pandas as pd
+
+# Función para conectar con GitHub usando el token secreto
+def get_github_repo():
+    token = st.secrets["GITHUB_TOKEN"]
+    g = Github(token)
+    return g.get_repo("Irati-Attsf/attsf-ecodriving")
+
+# Función para subir un archivo Excel a GitHub
+def upload_excel_to_github(uploaded_file, file_path):
+    repo = get_github_repo()
+    file_content = uploaded_file.getvalue()
+    try:
+        # Si el archivo ya existe, lo actualiza
+        contents = repo.get_contents(file_path)
+        repo.update_file(contents.path, "Actualizar archivo Excel vía Streamlit", file_content, contents.sha)
+        st.success(f"¡Archivo '{file_path}' actualizado correctamente en GitHub!")
+    except:
+        # Si no existe, lo crea nuevo
+        repo.create_file(file_path, "Subir nuevo archivo Excel vía Streamlit", file_content)
+        st.success(f"¡Archivo '{file_path}' subido correctamente a GitHub!")
+
+# Función para eliminar un archivo Excel de GitHub
+def delete_excel_from_github(file_path):
+    repo = get_github_repo()
+    try:
+        contents = repo.get_contents(file_path)
+        repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
+        st.success(f"¡Archivo '{file_path}' eliminado correctamente de GitHub!")
+    except Exception as e:
+        st.error(f"No se pudo eliminar el archivo: {e}")
