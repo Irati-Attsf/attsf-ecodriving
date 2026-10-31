@@ -746,26 +746,24 @@ def delete_excel_from_github(file_path):
     except Exception as e:
         st.error(f"No se pudo eliminar el archivo: {e}")
 
-# --- Panel visual para subir y borrar archivos Excel (Solo Administradores) ---
-# Comprobación infalible para detectar el modo Administrador en la sesión
-es_admin_activo = any(val == "Administrador" for val in st.session_state.values())
+# --- Apartado visual para gestionar archivos Excel en la vista de Administrador ---
+st.markdown("---")
+st.subheader("🛠️ Gestión de Archivos en GitHub (Administrador)")
 
-if es_admin_activo:
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📁 Gestión de Datos (Excel)")
-    
-    # 1. Botón para subir archivos
-    uploaded_file = st.sidebar.file_uploader("Selecciona un archivo Excel", type=["xlsx", "xls"])
-    if uploaded_file is not None:
-        nombre_archivo = uploaded_file.name
-        if st.sidebar.button("Subir archivo a GitHub"):
-            upload_excel_to_github(uploaded_file, nombre_archivo)
+col1, col2 = st.columns(2)
 
-    # 2. Apartado para borrar archivos
-    st.sidebar.markdown("---")
-    archivo_a_borrar = st.sidebar.text_input("Nombre del archivo a eliminar (ej: datos.xlsx)")
-    if st.sidebar.button("Eliminar archivo de GitHub"):
-        if archivo_a_borrar:
-            delete_excel_from_github(archivo_a_borrar)
+with col1:
+    st.markdown("**Subir o actualizar un archivo Excel**")
+    archivo_subido_admin = st.file_uploader("Selecciona el Excel para GitHub", type=["xlsx", "xls"], key="admin_upload")
+    if archivo_subido_admin is not None:
+        if st.button("Subir archivo a GitHub", key="btn_subir_github"):
+            upload_excel_to_github(archivo_subido_admin, archivo_subido_admin.name)
+
+with col2:
+    st.markdown("**Eliminar un archivo existente**")
+    archivo_a_borrar_admin = st.text_input("Nombre exacto del archivo a borrar (ej: datos.xlsx)", key="admin_delete_input")
+    if st.button("Eliminar archivo de GitHub", key="btn_borrar_github"):
+        if archivo_a_borrar_admin:
+            delete_excel_from_github(archivo_a_borrar_admin)
         else:
-            st.sidebar.warning("Escribe el nombre exacto del archivo que quieres borrar.")
+            st.warning("Escribe el nombre del archivo que quieres eliminar.")
