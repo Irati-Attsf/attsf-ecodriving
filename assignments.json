@@ -1,1 +1,22 @@
-{}
+{
+    "C30-SHACMAN F3000": "p",
+    "C31-SHACMAN F3000": "q",
+    "C32-SHACMAN F3000": "r",
+    "C33-SHACMAN F3000": "s",
+    "C-10 IVECO KERAX 350": "a",
+    "C-11 Kerax 350": "b",
+    "C-12 Kerax 350": "c",
+    "C-13 Kerax 350": "d",
+    "C-14 MAN FE33-370": "e",
+    "C-15 MAN": "f",
+    "C-16 IVECO 380E": "g",
+    "C-17 IVECO 380E": "h",
+    "C-19 Kerax DXI 330": "i",
+    "C-20 Kerax DXI 330": "j",
+    "C-21 Iveco Trakker": "k",
+    "C-22 Iveco Trakker": "l",
+    "C-23 Mercedes Actros": "m",
+    "C-24 Mercedes Actros": "n",
+    "C-26 Mercedes Actros": "o",
+    "C-25 Mercedes Actros": "s"
+}
