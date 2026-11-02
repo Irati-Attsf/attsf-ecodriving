@@ -148,7 +148,30 @@ def db_connect():
     con.execute("PRAGMA foreign_keys = ON")
     return con
 
+# Carga directa del archivo de Excel desde GitHub
+if "records" not in st.session_state:
+    try:
+        import io
+        from github import Github
+        token = st.secrets["GITHUB_TOKEN"]
+        g = Github(token)
+        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
+        file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
+        records = pd.read_excel(io.BytesIO(file_content))
+        st.session_state["records"] = records
+    except Exception:
+        st.session_state["records"] = pd.DataFrame()
 
+# Sincronización con la base de datos local
+try:
+    if not st.session_state["records"].empty:
+        con = db_connect()
+        st.session_state["records"].to_sql(
+            "records", con, if_exists="replace", index=False
+        )
+        con.close()
+except Exception as e:
+    st.error(f"Error al guardar en la base de datos: {e}")
 def init_db():
     with db_connect() as con:
         con.execute("""
