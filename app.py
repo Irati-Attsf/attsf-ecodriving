@@ -49,7 +49,7 @@ DEFAULT_PARAMS = {
     "simulated_idle_reduction_pct": 10.0,
 }
 
-# --- 1. FUNCIONES DE BASE DE DATOS (DEFINIDAS PRIMERO) ---
+# --- 1. BASE DE DATOS Y CONEXIÓN ---
 def db_connect():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.execute("PRAGMA foreign_keys = ON")
@@ -95,7 +95,7 @@ def init_db():
         for key, value in DEFAULT_PARAMS.items():
             con.execute("INSERT OR IGNORE INTO params(key, value) VALUES (?, ?)", (key, value))
 
-# --- 2. FUNCIONES DE GITHUB Y AUXILIARES ---
+# --- 2. INTEGRACIÓN CON GITHUB ---
 def get_github_repo():
     token = st.secrets["GITHUB_TOKEN"]
     g = Github(token)
@@ -121,25 +121,25 @@ def delete_excel_from_github(file_path):
 def cargar_asignaciones_de_github():
     url = f"https://api.github.com/repos/Irati-Attsf/attsf-ecodriving/contents/assignments.json"
     headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        file_content = response.json()["content"]
-        decoded_content = base64.b64decode(file_content).decode('utf-8')
-        assignments_data = json.loads(decoded_content)
-        con = db_connect()
-        for vehicle, driver in assignments_data.items():
-            con.execute("INSERT OR REPLACE INTO assignments (vehicle, driver) VALUES (?, ?)", (vehicle, driver))
-        con.commit()
-        con.close()
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            file_content = response.json()["content"]
+            decoded_content = base64.b64decode(file_content).decode('utf-8')
+            assignments_data = json.loads(decoded_content)
+            with db_connect() as con:
+                for vehicle, driver in assignments_data.items():
+                    con.execute("INSERT OR REPLACE INTO assignments (vehicle, driver) VALUES (?, ?)", (vehicle, driver))
+    except Exception:
+        pass
 
 def guardar_asignaciones_en_github():
     url = f"https://api.github.com/repos/Irati-Attsf/attsf-ecodriving/contents/assignments.json"
     headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
-    con = db_connect()
-    cursor = con.cursor()
-    cursor.execute("SELECT vehicle, driver FROM assignments")
-    assignments_dict = {row[0]: row[1] for row in cursor.fetchall()}
-    con.close()
+    with db_connect() as con:
+        cursor = con.cursor()
+        cursor.execute("SELECT vehicle, driver FROM assignments")
+        assignments_dict = {row[0]: row[1] for row in cursor.fetchall()}
     
     json_data = json.dumps(assignments_dict, indent=4)
     encoded_content = base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
@@ -155,6 +155,7 @@ def guardar_asignaciones_en_github():
         data["sha"] = sha
     requests.put(url, headers=headers, json=data)
 
+# --- 3. PARÁMETROS Y PROCESAMIENTO ---
 def get_params():
     with db_connect() as con:
         rows = con.execute("SELECT key, value FROM params").fetchall()
@@ -374,32 +375,14 @@ def environmental_summary(df, p):
     co2_saved = fuel_saved * p["co2_kg_per_litre"]
     return fuel_saved, co2_saved, fuel_reference
 
-# --- 3. FUNCIÓN PRINCIPAL ---
+# --- 4. APLICACIÓN PRINCIPAL ---
 def main():
     init_db()
     
-    # Cargar asignaciones e intentar sincronizar Excel de GitHub
     try:
         cargar_asignaciones_de_github()
     except Exception:
         pass
-
-    if "records" not in st.session_state:
-        try:
-            repo = get_github_repo()
-            file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
-            records = pd.read_excel(io.BytesIO(file_content))
-            st.session_state["records"] = records
-        except Exception:
-            st.session_state["records"] = pd.DataFrame()
-
-    try:
-        if not st.session_state["records"].empty:
-            con = db_connect()
-            st.session_state["records"].to_sql("records", con, if_exists="replace", index=False)
-            con.close()
-    except Exception as e:
-        st.error(f"Error al guardar en la base de datos: {e}")
 
     params = get_params()
     st.title("🌱 ATTSF | Programa de Ecodriving")
@@ -483,6 +466,10 @@ def main():
                             "UPDATE assignments SET driver=? WHERE vehicle=?",
                             [(str(r["driver"]).strip(), str(r["vehicle"])) for _, r in edited.iterrows()],
                         )
+                    try:
+                        guardar_asignaciones_en_github()
+                    except Exception:
+                        pass
                     st.success("Asignaciones guardadas.")
                     st.rerun()
 
@@ -521,14 +508,48 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
 
     with ranking_tab:
-        st.subheader("🏆 Clasificación General de Conductores")
+        st.subheader("🏆 Clasificación de Conductores")
+        if records.empty:
+            records = load_records()
+
         if not records.empty and "driver" in records.columns:
-            df_ranking = records.groupby("driver", as_index=False)["points_total"].sum()
-            df_ranking = df_ranking.sort_values(by="points_total", ascending=False).reset_index(drop=True)
-            for index, row in df_ranking.iterrows():
-                st.markdown(f"### {index + 1}º — **{row['driver']}**: {row['points_total']:.0f} puntos")
+            meses_disponibles = sorted(records["month"].unique().tolist(), reverse=True)
+            if not meses_disponibles:
+                st.info("No hay meses registrados todavía.")
+            else:
+                mes_seleccionado = st.selectbox("📅 Selecciona el mes a consultar:", meses_disponibles, key="filtro_mes_independiente")
+                df_mes = records[records["month"] == mes_seleccionado].copy()
+                df_ranking = df_mes.groupby("driver", as_index=False)["points_total"].sum()
+                df_ranking = df_ranking.sort_values(by="points_total", ascending=False).reset_index(drop=True)
+                
+                st.markdown("---")
+                if df_ranking.empty:
+                    st.info(f"No hay registros de conducción para el periodo {mes_seleccionado}.")
+                else:
+                    st.markdown(f"#### 📊 Clasificación oficial del mes **{mes_seleccionado}** (Puntos independientes)")
+                    for index, row in df_ranking.iterrows():
+                        conductor = row["driver"]
+                        puntos = row["points_total"]
+                        
+                        if index == 0:
+                            insignia = "🥇 1º"
+                        elif index == 1:
+                            insignia = "🥈 2º"
+                        elif index == 2:
+                            insignia = "🥉 3º"
+                        elif index == 3:
+                            insignia = "🏅 4º"
+                        elif index == 4:
+                            insignia = "🏅 5º"
+                        else:
+                            insignia = f"{index + 1}º"
+                            
+                        if index < 5:
+                            st.markdown(f"### {insignia} — **{conductor}**: {puntos:.0f} puntos")
+                        else:
+                            st.write(f"{insignia} — **{conductor}**: {puntos:.0f} puntos")
         else:
-            st.info("Todavía no hay registros cargados para calcular la clasificación.")
+            st.info("Todavía no hay registros cargados en la base de datos.")
 
     with impact_tab:
         st.subheader("Impacto ambiental y ahorro estimado")
