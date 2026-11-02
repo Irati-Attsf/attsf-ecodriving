@@ -135,17 +135,14 @@ if "records" not in st.session_state:
         st.session_state["records"] = pd.DataFrame()
       # Sincronizar los datos de GitHub con la base de datos local si está vacía
 try:
-  if not st.session_state["records"].empty:
-    con = db_connect()
-    cursor = con.cursor()
-    cursor.execute("SELECT COUNT(*) FROM records")
-    if cursor.fetchone()[0] == 0:
-      st.session_state["records"].to_sql(
-          "records", con, if_exists="append", index=False
-      )
-    con.close()
-except Exception:
-  pass
+    if not st.session_state["records"].empty:
+        con = db_connect()
+        st.session_state["records"].to_sql(
+            "records", con, if_exists="replace", index=False
+        )
+        con.close()
+except Exception as e:
+    st.error(f"Error al guardar en la base de datos: {e}")
 def db_connect():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.execute("PRAGMA foreign_keys = ON")
