@@ -129,8 +129,8 @@ if "records" not in st.session_state:
         repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
         contents = repo.get_contents("")
         file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
-records = pd.read_excel(io.BytesIO(file_content))
-            st.session_state["records"] = records
+        records = pd.read_excel(io.BytesIO(file_content))
+        st.session_state["records"] = records
     except Exception:
         st.session_state["records"] = pd.DataFrame()
       # Sincronizar los datos de GitHub con la base de datos local si está vacía
