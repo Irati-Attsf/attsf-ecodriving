@@ -866,7 +866,7 @@ def delete_excel_from_github(file_path):
         st.success(f"¡Archivo '{file_path}' eliminado correctamente de GitHub!")
     except Exception as e:
         st.error("Ha ocurrido un error al procesar.")
-      st.sidebar.markdown("---")
+st.sidebar.markdown("---")
 if st.sidebar.button("💾 Guardar asignaciones en GitHub"):
   try:
     guardar_asignaciones_en_github()
