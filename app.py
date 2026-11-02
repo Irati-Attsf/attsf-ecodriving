@@ -564,11 +564,43 @@ def main():
 
     if not is_admin:
         with simulator_tab:
-            st.subheader("¿Qué pasaría si…?")
-            st.info("Simulador disponible próximamente.")
+            st.subheader("🎛️ Simulador de mejora de Ecodriving")
+            st.markdown("Ajusta los parámetros para simular el impacto en el ahorro de combustible y reducción de emisiones.")
+            sim_idle_red = st.slider("Reducción porcentual del tiempo en ralentí (%)", 0.0, 50.0, float(params["simulated_idle_reduction_pct"]), 1.0)
+            if records.empty:
+                st.info("Importa registros para ejecutar simulaciones basadas en datos reales.")
+            else:
+                base_fuel, base_co2, _ = environmental_summary(records, params)
+                extra_fuel = (sim_idle_red / 10.0) * (base_fuel * 0.2)
+                sim_fuel = base_fuel + extra_fuel
+                sim_co2 = sim_fuel * params["co2_kg_per_litre"]
+                s1, s2 = st.columns(2)
+                s1.metric("Ahorro de combustible simulado", f"{sim_fuel:,.1f} L", delta=f"+{extra_fuel:,.1f} L")
+                s2.metric("CO₂ evitado simulado", f"{sim_co2:,.1f} kg", delta=f"+{extra_fuel * params['co2_kg_per_litre']:,.1f} kg")
+
         with badges_tab:
-            st.subheader("Insignias y logros")
-            st.info("Logros de la flota.")
+            st.subheader("🎖️ Insignias y logros de los conductores")
+            if records.empty:
+                st.info("No hay datos de conducción registrados para mostrar insignias.")
+            else:
+                drivers_list = sorted([d for d in records["driver"].unique() if d and d != "Sin asignar"])
+                if not drivers_list:
+                    st.info("Todavía no hay conductores asignados a los vehículos.")
+                else:
+                    sel_driver_badge = st.selectbox("Selecciona un conductor para ver sus insignias:", drivers_list, key="select_driver_badges")
+                    df_driver_records = records[records["driver"] == sel_driver_badge]
+                    
+                    st.markdown(f"### Logros obtenidos por **{sel_driver_badge}**")
+                    for _, r in df_driver_records.iterrows():
+                        b_list = driver_badges(r)
+                        with st.container():
+                            st.markdown(f"**Periodo / Mes: {r['month']}** (Vehículo: {r['vehicle']})")
+                            if b_list:
+                                for b in b_list:
+                                    st.success(f"{b} (Puntos totales del mes: {r['points_total']:.0f})")
+                            else:
+                                st.info(f"Sin insignias específicas este mes (Puntos: {r['points_total']:.0f}). ¡Ánimo para el siguiente!")
+                            st.markdown("---")
 
     st.sidebar.markdown("---")
     if st.sidebar.button("💾 Guardar asignaciones en GitHub"):
