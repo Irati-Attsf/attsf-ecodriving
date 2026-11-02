@@ -223,11 +223,11 @@ def find_columns(df):
                 break
     return mapping
 
-def prepare_excel(uploaded, month):
-    raw = pd.read_excel(uploaded)
+def prepare_excel(file_obj_or_path, month):
+    raw = pd.read_excel(file_obj_or_path)
     mapping = find_columns(raw)
     if "vehicle" not in mapping:
-        raise ValueError("No encuentro la columna del número de vehículo. Revisa el encabezado del Excel.")
+        raise ValueError("No encuentro la columna del número de vehículo.")
     df = pd.DataFrame()
     df["vehicle"] = raw[mapping["vehicle"]].astype(str).str.strip()
     df = df[df["vehicle"].notna() & (df["vehicle"] != "") & (df["vehicle"].str.lower() != "nan")].copy()
@@ -243,7 +243,6 @@ def prepare_excel(uploaded, month):
         else:
             df[field] = 0.0
     df["month"] = month
-    df["source_name"] = uploaded.name
     return df
 
 def score_row(row, p):
@@ -289,20 +288,11 @@ def score_row(row, p):
         "idle_pct": round(idle_pct, 2),
     }
 
-def load_records():
-    with db_connect() as con:
-        df = pd.read_sql_query("SELECT * FROM records", con)
-        assignments = pd.read_sql_query("SELECT * FROM assignments", con)
-    if not df.empty and not assignments.empty:
-        df = df.merge(assignments, on="vehicle", how="left")
-        df["driver"] = df["driver"].fillna("").replace("", "Sin asignar")
-    elif not df.empty:
-        df["driver"] = "Sin asignar"
-    return df
-
-def store_import(df, params):
+def store_import(df, params, source_name, month_override=None):
     scores = df.apply(lambda r: score_row(r, params), axis=1, result_type="expand")
     df = pd.concat([df.reset_index(drop=True), scores.reset_index(drop=True)], axis=1)
+    if month_override:
+        df["month"] = month_override
     with db_connect() as con:
         for vehicle in df["vehicle"].unique():
             con.execute("INSERT OR IGNORE INTO assignments(vehicle, driver) VALUES (?, '')", (vehicle,))
@@ -329,8 +319,39 @@ def store_import(df, params):
                 float(r["idle_hours"]), float(r["stops"]), float(r["planned_hours"]),
                 float(r["points_idle"]), float(r["points_speed"]), float(r["points_stops"]),
                 float(r["points_distance"]), float(r["points_duration"]), float(r["points_total"]),
-                str(r["source_name"])
+                source_name
             ))
+
+# Sincronización automática de archivos Excel guardados en GitHub al arrancar
+def sincronizar_excel_desde_github(params):
+    try:
+        repo = get_github_repo()
+        contents = repo.get_contents("")
+        excel_files = [f for f in contents if f.path.endswith(".xlsx")]
+        for file_content in excel_files:
+            file_data = file_content.decoded_content
+            nombre = file_content.path
+            # Intentar extraer el mes si viene en el nombre (ej: 2026-09.xlsx), si no usar mes actual por defecto
+            mes_inferido = datetime.today().strftime("%Y-%m")
+            for part in nombre.replace(".xlsx", "").split("_"):
+                if len(part) == 7 and part[4] == "-":
+                    mes_inferido = part
+                    break
+            df = prepare_excel(io.BytesIO(file_data), mes_inferido)
+            store_import(df, params, nombre, month_override=mes_inferido)
+    except Exception:
+        pass
+
+def load_records():
+    with db_connect() as con:
+        df = pd.read_sql_query("SELECT * FROM records", con)
+        assignments = pd.read_sql_query("SELECT * FROM assignments", con)
+    if not df.empty and not assignments.empty:
+        df = df.merge(assignments, on="vehicle", how="left")
+        df["driver"] = df["driver"].fillna("").replace("", "Sin asignar")
+    elif not df.empty:
+        df["driver"] = "Sin asignar"
+    return df
 
 def driver_badges(row):
     badges = []
@@ -350,8 +371,7 @@ def help_section(role):
             st.markdown("""
             **1. Importar el Excel mensual**
             - Elige el mes al que pertenecen los datos.
-            - Sube un archivo `.xlsx` o `.xls`.
-            - Comprueba la vista previa y pulsa **Procesar e importar**.
+            - Sube un archivo `.xlsx` o `.xls` (se guardará automáticamente para siempre en GitHub).
             """)
         else:
             st.markdown("""
@@ -385,6 +405,10 @@ def main():
         pass
 
     params = get_params()
+
+    # Sincronización automática de GitHub al encender o reiniciar la app
+    sincronizar_excel_desde_github(params)
+
     st.title("🌱 ATTSF | Programa de Ecodriving")
     st.caption("Conducción eficiente · Reconocimiento positivo · Flota humanitaria")
     
@@ -400,7 +424,7 @@ def main():
             st.stop()
         st.sidebar.success("Sesión de administrador activa")
     else:
-        st.sidebar.info("Modo de consulta: no puedes modificar los datos.")
+        st.sidebar.info("Modo de consulta: los conductores pueden ver las clasificaciones e insignias en tiempo real.")
 
     help_section("Administrador" if is_admin else "Consulta")
     records = load_records()
@@ -414,25 +438,27 @@ def main():
             uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
             if uploaded:
                 try:
-                    upload_excel_to_github(uploaded, uploaded.name)
+                    # Guardar con nombre que incluya el mes para identificarlo claramente
+                    safe_name = f"{month_key}_{uploaded.name}"
+                    upload_excel_to_github(uploaded, safe_name)
                     preview = prepare_excel(uploaded, month_key)
                     st.write("Vista previa de los datos normalizados")
                     st.dataframe(preview, use_container_width=True)
                     if st.button("Procesar e importar", type="primary"):
-                        store_import(preview, params)
-                        st.success(f"Importación completada para {month_key}.")
+                        store_import(preview, params, safe_name, month_override=month_key)
+                        st.success(f"Importación completada y guardada permanentemente en GitHub para {month_key}.")
                         st.rerun()
                 except Exception as exc:
                     st.error(f"No se pudo leer el Excel: {exc}")
 
             st.markdown("---")
-            st.subheader("🗑️ Gestión y eliminación de archivos guardados")
+            st.subheader("🗑️ Gestión y eliminación de archivos guardados en GitHub")
             try:
                 repo = get_github_repo()
                 contents = repo.get_contents("")
                 excel_files = [f.path for f in contents if f.path.endswith(".xlsx")]
                 if not excel_files:
-                    st.info("No hay archivos Excel guardados actualmente.")
+                    st.info("No hay archivos Excel guardados actualmente en GitHub.")
                 else:
                     for f_name in excel_files:
                         col1, col2 = st.columns([4, 1])
