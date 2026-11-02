@@ -49,7 +49,44 @@ def delete_excel_from_github(file_path):
         repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
     except Exception as e:
         st.error(f"Error al eliminar: {e}")
+     import json
 
+def cargar_asignaciones_de_github():
+    url = f"https://api.github.com/repos/Irati-Attsf/attssf-ecodriving/contents/assignments.json"
+    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        file_content = response.json()["content"]
+        decoded_content = base64.b64decode(file_content).decode('utf-8')
+        assignments_data = json.loads(decoded_content)
+        con = db_connect()
+        for vehicle, driver in assignments_data.items():
+            con.execute("INSERT OR REPLACE INTO assignments (vehicle, driver) VALUES (?, ?)", (vehicle, driver))
+        con.commit()
+        con.close()
+
+def guardar_asignaciones_en_github():
+    url = f"https://api.github.com/repos/Irati-Attsf/attssf-ecodriving/contents/assignments.json"
+    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
+    con = db_connect()
+    cursor = con.cursor()
+    cursor.execute("SELECT vehicle, driver FROM assignments")
+    assignments_dict = {row[0]: row[1] for row in cursor.fetchall()}
+    con.close()
+    
+    json_data = json.dumps(assignments_dict, indent=4)
+    encoded_content = base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
+    
+    response = requests.get(url, headers=headers)
+    sha = response.json().get("sha") if response.status_code == 200 else None
+    
+    data = {
+        "message": "Actualización de asignaciones",
+        "content": encoded_content
+    }
+    if sha:
+        data["sha"] = sha
+    requests.put(url, headers=headers, json=data)
 APP_TITLE = "ATTSF · Ecodriving"
 DB_PATH = Path(os.getenv("ATTSF_DB_PATH", "ecodriving.db"))
 DEFAULT_ADMIN_PASSWORD = "admin-attsf"
@@ -78,6 +115,10 @@ DEFAULT_PARAMS = {
 }
 
 # --- RECUPERAR DATOS DE GITHUB AL ENCENDER ---
+try:
+  cargar_asignaciones_de_github()
+except Exception:
+  pass
 if "records" not in st.session_state:
     try:
         import io
@@ -825,3 +866,11 @@ def delete_excel_from_github(file_path):
         st.success(f"¡Archivo '{file_path}' eliminado correctamente de GitHub!")
     except Exception as e:
         st.error("Ha ocurrido un error al procesar.")
+      st.sidebar.markdown("---")
+if st.sidebar.button("💾 Guardar asignaciones en GitHub"):
+  try:
+    guardar_asignaciones_en_github()
+    st.sidebar.success("¡Guardado en GitHub!")
+  except Exception as e:
+    st.sidebar.error(f"Error: {e}")
+      
