@@ -49,7 +49,7 @@ def delete_excel_from_github(file_path):
         repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
     except Exception as e:
         st.error(f"Error al eliminar: {e}")
-     import json
+import json
 
 def cargar_asignaciones_de_github():
     url = f"https://api.github.com/repos/Irati-Attsf/attssf-ecodriving/contents/assignments.json"
