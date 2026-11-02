@@ -2,92 +2,25 @@
 ATTSF · Programa de Ecodriving
 Aplicación Streamlit para importar datos mensuales, asignar conductores,
 calcular puntos positivos, visualizar impacto ambiental y simular mejoras.
-
-IMPORTANTE:
-- Los datos se guardan en SQLite (ecodriving.db) en el equipo que ejecuta la app.
-- Para Streamlit Community Cloud, el disco local puede ser efímero. Use una base de
-  datos persistente externa antes de utilizarla como sistema oficial compartido.
-- La contraseña inicial de administrador se configura con la variable de entorno
-  ATTSF_ADMIN_PASSWORD o con st.secrets["admin_password"].
-- Si no se configura, se usa una contraseña de demostración: cambiarla antes de publicar.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import io
+import json
 import os
-import requests
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import requests
 import streamlit as st
-import base64
-import pandas as pd
 from github import Github
-import streamlit as st
-def upload_excel_to_github(uploaded_file, file_path):
-    token = st.secrets["GITHUB_TOKEN"]
-    g = Github(token)
-    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-    file_content = uploaded_file.getvalue()
-    try:
-        contents = repo.get_contents(file_path)
-        repo.update_file(contents.path, "Actualizar archivo Excel vía Streamlit", file_content, contents.sha)
-    except:
-        repo.create_file(file_path, "Subir nuevo archivo Excel vía Streamlit", file_content)
 
-def delete_excel_from_github(file_path):
-    token = st.secrets["GITHUB_TOKEN"]
-    g = Github(token)
-    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-    try:
-        contents = repo.get_contents(file_path)
-        repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
-    except Exception as e:
-        st.error(f"Error al eliminar: {e}")
-import json
-
-def cargar_asignaciones_de_github():
-    url = f"https://api.github.com/repos/Irati-Attsf/attssf-ecodriving/contents/assignments.json"
-    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        file_content = response.json()["content"]
-        decoded_content = base64.b64decode(file_content).decode('utf-8')
-        assignments_data = json.loads(decoded_content)
-        con = db_connect()
-        for vehicle, driver in assignments_data.items():
-            con.execute("INSERT OR REPLACE INTO assignments (vehicle, driver) VALUES (?, ?)", (vehicle, driver))
-        con.commit()
-        con.close()
-
-def guardar_asignaciones_en_github():
-    url = f"https://api.github.com/repos/Irati-Attsf/attssf-ecodriving/contents/assignments.json"
-    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
-    con = db_connect()
-    cursor = con.cursor()
-    cursor.execute("SELECT vehicle, driver FROM assignments")
-    assignments_dict = {row[0]: row[1] for row in cursor.fetchall()}
-    con.close()
-    
-    json_data = json.dumps(assignments_dict, indent=4)
-    encoded_content = base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
-    
-    response = requests.get(url, headers=headers)
-    sha = response.json().get("sha") if response.status_code == 200 else None
-    
-    data = {
-        "message": "Actualización de asignaciones",
-        "content": encoded_content
-    }
-    if sha:
-        data["sha"] = sha
-    requests.put(url, headers=headers, json=data)
 APP_TITLE = "ATTSF · Ecodriving"
 DB_PATH = Path(os.getenv("ATTSF_DB_PATH", "ecodriving.db"))
 DEFAULT_ADMIN_PASSWORD = "admin-attsf"
@@ -115,63 +48,12 @@ DEFAULT_PARAMS = {
     "simulated_idle_reduction_pct": 10.0,
 }
 
-# --- RECUPERAR DATOS DE GITHUB AL ENCENDER ---
-try:
-  cargar_asignaciones_de_github()
-except Exception:
-  pass
-if "records" not in st.session_state:
-    try:
-        import io
-        from github import Github
-        token = st.secrets["GITHUB_TOKEN"]
-        g = Github(token)
-        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-        contents = repo.get_contents("")
-        file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
-        records = pd.read_excel(io.BytesIO(file_content))
-        st.session_state["records"] = records
-    except Exception:
-        st.session_state["records"] = pd.DataFrame()
-      # Sincronizar los datos de GitHub con la base de datos local si está vacía
-try:
-    if not st.session_state["records"].empty:
-        con = db_connect()
-        st.session_state["records"].to_sql(
-            "records", con, if_exists="replace", index=False
-        )
-        con.close()
-except Exception as e:
-    st.error(f"Error al guardar en la base de datos: {e}")
+# --- 1. FUNCIONES DE BASE DE DATOS (DEFINIDAS PRIMERO) ---
 def db_connect():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.execute("PRAGMA foreign_keys = ON")
     return con
 
-# Carga directa del archivo de Excel desde GitHub
-if "records" not in st.session_state:
-    try:
-        import io
-        from github import Github
-        token = st.secrets["GITHUB_TOKEN"]
-        g = Github(token)
-        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-        file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
-        records = pd.read_excel(io.BytesIO(file_content))
-        st.session_state["records"] = records
-    except Exception:
-        st.session_state["records"] = pd.DataFrame()
-
-# Sincronización con la base de datos local
-try:
-    if not st.session_state["records"].empty:
-        con = db_connect()
-        st.session_state["records"].to_sql(
-            "records", con, if_exists="replace", index=False
-        )
-        con.close()
-except Exception as e:
-    st.error(f"Error al guardar en la base de datos: {e}")
 def init_db():
     with db_connect() as con:
         con.execute("""
@@ -212,6 +94,65 @@ def init_db():
         for key, value in DEFAULT_PARAMS.items():
             con.execute("INSERT OR IGNORE INTO params(key, value) VALUES (?, ?)", (key, value))
 
+# --- 2. FUNCIONES DE GITHUB Y AUXILIARES ---
+def get_github_repo():
+    token = st.secrets["GITHUB_TOKEN"]
+    g = Github(token)
+    return g.get_repo("Irati-Attsf/attsf-ecodriving")
+
+def upload_excel_to_github(uploaded_file, file_path):
+    repo = get_github_repo()
+    file_content = uploaded_file.getvalue()
+    try:
+        contents = repo.get_contents(file_path)
+        repo.update_file(contents.path, "Actualizar archivo Excel vía Streamlit", file_content, contents.sha)
+    except:
+        repo.create_file(file_path, "Subir nuevo archivo Excel vía Streamlit", file_content)
+
+def delete_excel_from_github(file_path):
+    repo = get_github_repo()
+    try:
+        contents = repo.get_contents(file_path)
+        repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
+    except Exception as e:
+        st.error(f"Error al eliminar: {e}")
+
+def cargar_asignaciones_de_github():
+    url = f"https://api.github.com/repos/Irati-Attsf/attsf-ecodriving/contents/assignments.json"
+    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        file_content = response.json()["content"]
+        decoded_content = base64.b64decode(file_content).decode('utf-8')
+        assignments_data = json.loads(decoded_content)
+        con = db_connect()
+        for vehicle, driver in assignments_data.items():
+            con.execute("INSERT OR REPLACE INTO assignments (vehicle, driver) VALUES (?, ?)", (vehicle, driver))
+        con.commit()
+        con.close()
+
+def guardar_asignaciones_en_github():
+    url = f"https://api.github.com/repos/Irati-Attsf/attsf-ecodriving/contents/assignments.json"
+    headers = {"Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}"}
+    con = db_connect()
+    cursor = con.cursor()
+    cursor.execute("SELECT vehicle, driver FROM assignments")
+    assignments_dict = {row[0]: row[1] for row in cursor.fetchall()}
+    con.close()
+    
+    json_data = json.dumps(assignments_dict, indent=4)
+    encoded_content = base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
+    
+    response = requests.get(url, headers=headers)
+    sha = response.json().get("sha") if response.status_code == 200 else None
+    
+    data = {
+        "message": "Actualización de asignaciones",
+        "content": encoded_content
+    }
+    if sha:
+        data["sha"] = sha
+    requests.put(url, headers=headers, json=data)
 
 def get_params():
     with db_connect() as con:
@@ -219,7 +160,6 @@ def get_params():
     params = DEFAULT_PARAMS.copy()
     params.update({k: float(v) for k, v in rows})
     return params
-
 
 def save_params(params):
     with db_connect() as con:
@@ -229,7 +169,6 @@ def save_params(params):
             [(k, float(v)) for k, v in params.items()],
         )
 
-
 def get_admin_password():
     try:
         secret = st.secrets.get("admin_password", "")
@@ -237,10 +176,8 @@ def get_admin_password():
         secret = ""
     return os.getenv("ATTSF_ADMIN_PASSWORD") or secret or DEFAULT_ADMIN_PASSWORD
 
-
 def normalise_name(value):
     return " ".join(str(value).strip().lower().replace("_", " ").split())
-
 
 COLUMN_ALIASES = {
     "vehicle": ["número de vehículo", "numero de vehículo", "numero de vehiculo", "vehículo", "vehiculo", "vehicle", "camión", "camion"],
@@ -254,13 +191,10 @@ COLUMN_ALIASES = {
     "planned_hours": ["duración planificada", "duracion planificada", "tiempo planificado", "planned_hours", "horas planificadas"],
 }
 
-
 def parse_duration(value):
-    """Convierte números, 'HH:MM:SS' o 'HH:MM' en horas."""
     if pd.isna(value):
         return 0.0
     if isinstance(value, (int, float)):
-        # En Excel, duraciones de tiempo a menudo se almacenan como fracción de día.
         val = float(value)
         return val * 24 if 0 <= val < 1 else val
     s = str(value).strip()
@@ -276,7 +210,6 @@ def parse_duration(value):
     except ValueError:
         return 0.0
 
-
 def find_columns(df):
     lookup = {normalise_name(c): c for c in df.columns}
     mapping = {}
@@ -287,7 +220,6 @@ def find_columns(df):
                 mapping[canonical] = lookup[key]
                 break
     return mapping
-
 
 def prepare_excel(uploaded, month):
     raw = pd.read_excel(uploaded)
@@ -308,12 +240,9 @@ def prepare_excel(uploaded, month):
             df[field] = raw.loc[df.index, mapping[field]].apply(parse_duration)
         else:
             df[field] = 0.0
-    # Ralentí suele venir como duración HH:MM:SS. Si el Excel trae porcentaje,
-    # hay que adaptar este campo; se interpreta como tiempo, no como porcentaje.
     df["month"] = month
     df["source_name"] = uploaded.name
     return df
-
 
 def score_row(row, p):
     duration = max(float(row["duration_hours"]), 0)
@@ -330,7 +259,6 @@ def score_row(row, p):
     if p["speed_min"] <= speed <= p["speed_max"]:
         ps = p["speed_points_good"]
     else:
-        # El rango de tolerancia se define como 10 km/h fuera del rango eficiente.
         if (p["speed_min"] - 10 <= speed < p["speed_min"]) or (p["speed_max"] < speed <= p["speed_max"] + 10):
             ps = p["speed_points_near"]
         else:
@@ -347,7 +275,6 @@ def score_row(row, p):
         on_time = duration <= planned * p["duration_target_pct"] / 100
         pdur = p["duration_points_good"] if on_time else p["duration_points_other"]
     else:
-        # Sin tiempo planificado no es justo penalizar: se otorga la puntuación base.
         pdur = p["duration_points_good"]
 
     return {
@@ -360,20 +287,18 @@ def score_row(row, p):
         "idle_pct": round(idle_pct, 2),
     }
 
-
 def load_records():
     with db_connect() as con:
         df = pd.read_sql_query("SELECT * FROM records", con)
         assignments = pd.read_sql_query("SELECT * FROM assignments", con)
-    if not df.empty:
+    if not df.empty and not assignments.empty:
         df = df.merge(assignments, on="vehicle", how="left")
         df["driver"] = df["driver"].fillna("").replace("", "Sin asignar")
+    elif not df.empty:
+        df["driver"] = "Sin asignar"
     return df
 
-
 def store_import(df, params):
-    # Cada importación reemplaza los registros de los mismos vehículos y mes,
-    # para permitir corregir un Excel sin duplicar puntos.
     scores = df.apply(lambda r: score_row(r, params), axis=1, result_type="expand")
     df = pd.concat([df.reset_index(drop=True), scores.reset_index(drop=True)], axis=1)
     with db_connect() as con:
@@ -405,7 +330,6 @@ def store_import(df, params):
                 str(r["source_name"])
             ))
 
-
 def driver_badges(row):
     badges = []
     if row.get("idle_pct", 100) < 5:
@@ -418,7 +342,6 @@ def driver_badges(row):
         badges.append("📍 Kilómetros Eficientes")
     return badges
 
-
 def help_section(role):
     with st.expander("❓ Ayuda / Guía de uso", expanded=False):
         if role == "Administrador":
@@ -427,49 +350,22 @@ def help_section(role):
             - Elige el mes al que pertenecen los datos.
             - Sube un archivo `.xlsx` o `.xls`.
             - Comprueba la vista previa y pulsa **Procesar e importar**.
-            - Se aceptan encabezados equivalentes a los descritos en la guía. Si un dato no está presente, se usa 0.
-            - Para duración y ralentí se admiten horas numéricas o formatos `HH:MM` / `HH:MM:SS`.
-
-            **2. Asignar conductores**
-            - En la pestaña **Conductores**, escribe el nombre para cada vehículo y guarda.
-            - Los vehículos nuevos aparecen como **Sin asignar** hasta que los identifiques.
-
-            **3. Configurar puntuación**
-            - En **Parámetros**, ajusta los umbrales y valores. Los puntos nunca bajan de cero.
-            - Al cambiar parámetros, vuelve a importar el mes para recalcular sus puntuaciones.
-
-            **4. Interpretar impacto ambiental**
-            - El combustible y el CO₂ son estimaciones basadas en los parámetros configurados, no mediciones directas del camión.
-            - Define un consumo de referencia realista y valida los cálculos con el equipo de flota.
             """)
         else:
             st.markdown("""
             **Cómo sumar puntos**
-            - Mantén el ralentí bajo, conduce dentro del rango de velocidad eficiente y evita paradas innecesarias cuando la seguridad y la operación lo permitan.
-            - Completa las rutas de forma segura. La distancia aporta puntos proporcionales hasta el máximo configurado.
-            - No se restan puntos por malos resultados: cada criterio suma puntos o aporta cero.
-
-            **Qué puedes consultar**
-            - **Clasificación:** puntos por mes y acumulados.
-            - **Impacto ambiental:** estimación de combustible y CO₂ ahorrados.
-            - **Simulador:** prueba mejoras hipotéticas para el mes siguiente.
-            - **Insignias y evolución:** hitos positivos y progreso de la flota.
-
-            Las velocidades, los tiempos y las paradas deben interpretarse siempre según la seguridad, el tipo de carga, el terreno y las necesidades humanitarias.
+            - Mantén el ralentí bajo, conduce dentro del rango eficiente y evita paradas innecesarias.
             """)
-
 
 def environmental_summary(df, p):
     if df.empty:
         return 0.0, 0.0, 0.0
     km = df["distance_km"].clip(lower=0).sum()
     idle_h = df["idle_hours"].clip(lower=0).sum()
-    # Estimación de ahorro potencial por ralentí frente a una referencia del 10% del viaje.
     duration = df["duration_hours"].clip(lower=0).sum()
     reference_idle = duration * 0.10
     idle_saved_h = max(reference_idle - idle_h, 0)
     idle_fuel_saved = idle_saved_h * p["idle_l_per_hour"]
-    # No se afirma ahorro real de conducción: la cifra es potencial estimada vs consumo de referencia.
     fuel_reference = km * p["fuel_l_per_100km"] / 100
     efficiency_factor = min(max(df["points_total"].mean() / 100, 0), 1) if not df.empty else 0
     driving_saving = fuel_reference * 0.05 * efficiency_factor
@@ -477,35 +373,41 @@ def environmental_summary(df, p):
     co2_saved = fuel_saved * p["co2_kg_per_litre"]
     return fuel_saved, co2_saved, fuel_reference
 
-
+# --- 3. FUNCIÓN PRINCIPAL ---
 def main():
     init_db()
     
-    # --- AUTORRECUPERACIÓN DESDE GITHUB SI LA BD ESTÁ VACÍA ---
+    # Cargar asignaciones e intentar sincronizar Excel de GitHub
     try:
-        with db_connect() as con:
-            count = con.execute("SELECT COUNT(*) FROM records").fetchone()[0]
-        if count == 0:
-            token = st.secrets["GITHUB_TOKEN"]
-            g = Github(token)
-            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-            contents = repo.get_contents("")
-            excel_files = [f for f in contents if f.path.endswith(".xlsx")]
-            if excel_files:
-                for file_elem in excel_files:
-                    file_content = file_elem.decoded_content
-                    month_key = datetime.today().strftime("%Y-%m")
-                    preview = prepare_excel(io.BytesIO(file_content), month_key)
-                    store_import(preview, get_params())
+        cargar_asignaciones_de_github()
     except Exception:
         pass
+
+    if "records" not in st.session_state:
+        try:
+            repo = get_github_repo()
+            file_content = repo.get_contents("2026-11-01.xlsx").decoded_content
+            records = pd.read_excel(io.BytesIO(file_content))
+            st.session_state["records"] = records
+        except Exception:
+            st.session_state["records"] = pd.DataFrame()
+
+    try:
+        if not st.session_state["records"].empty:
+            con = db_connect()
+            st.session_state["records"].to_sql("records", con, if_exists="replace", index=False)
+            con.close()
+    except Exception as e:
+        st.error(f"Error al guardar en la base de datos: {e}")
 
     params = get_params()
     st.title("🌱 ATTSF | Programa de Ecodriving")
     st.caption("Conducción eficiente · Reconocimiento positivo · Flota humanitaria")
+    
     st.sidebar.header("Acceso")
     role = st.sidebar.radio("Selecciona la vista", ["Conductor / Consulta", "Administrador"])
     is_admin = role == "Administrador"
+    
     if is_admin:
         password = st.sidebar.text_input("Contraseña de administrador", type="password")
         if not hmac.compare_digest(password, get_admin_password()):
@@ -526,49 +428,39 @@ def main():
             month = st.date_input("Mes de los datos", value=datetime.today().date().replace(day=1))
             month_key = month.strftime("%Y-%m")
             uploaded = st.file_uploader("Sube el Excel mensual", type=["xlsx", "xls"])
-        if uploaded:
+            if uploaded:
+                try:
+                    upload_excel_to_github(uploaded, uploaded.name)
+                    preview = prepare_excel(uploaded, month_key)
+                    st.write("Vista previa de los datos normalizados")
+                    st.dataframe(preview, use_container_width=True)
+                    if st.button("Procesar e importar", type="primary"):
+                        store_import(preview, params)
+                        st.success(f"Importación completada para {month_key}.")
+                        st.rerun()
+                except Exception as exc:
+                    st.error(f"No se pudo leer el Excel: {exc}")
+
+            st.markdown("---")
+            st.subheader("🗑️ Gestión y eliminación de archivos guardados")
             try:
-                upload_excel_to_github(uploaded, uploaded.name)
-                preview = prepare_excel(uploaded, month_key)
-                st.write("Vista previa de los datos normalizados")
-                st.dataframe(preview, use_container_width=True)
-                if "planned_hours" not in find_columns(pd.read_excel(uploaded)):
-                    st.warning("No se ha detectado una columna de duración planificada. En ese caso, el sistema otorga la puntuación positiva configurada para duración.")
-                if st.button("Procesar e importar", type="primary"):
-                    store_import(preview, params)
-                    st.success(f"Importación completada: {len(preview)} vehículo/registro(s) para {month_key}.")
-                    st.rerun()
-            except Exception as exc:
-                st.error(f"No se pudo leer el Excel: {exc}")
+                repo = get_github_repo()
+                contents = repo.get_contents("")
+                excel_files = [f.path for f in contents if f.path.endswith(".xlsx")]
+                if not excel_files:
+                    st.info("No hay archivos Excel guardados actualmente.")
+                else:
+                    for f_name in excel_files:
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.text(f_name)
+                        with col2:
+                            if st.button("Eliminar", key=f"del_{f_name}", type="secondary"):
+                                delete_excel_from_github(f_name)
+                                st.rerun()
+            except Exception as e:
+                st.error(f"No se pudieron cargar los archivos: {e}")
 
-        st.markdown("---")
-        st.subheader("🗑️ Gestión y eliminación de archivos guardados")
-        st.caption("Aquí puedes ver los archivos Excel almacenados en GitHub y eliminarlos si lo necesitas.")
-        
-        try:
-            token = st.secrets["GITHUB_TOKEN"]
-            g = Github(token)
-            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-            contents = repo.get_contents("")
-            excel_files = [f.path for f in contents if f.path.endswith(".xlsx")]
-            
-            if not excel_files:
-                st.info("No hay archivos Excel guardados actualmente en el repositorio.")
-            else:
-                for f_name in excel_files:
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.text(f_name)
-                    with col2:
-                        if st.button("Eliminar", key=f"del_{f_name}", type="secondary"):
-                            delete_excel_from_github(f_name)
-                            st.rerun()
-        except Exception as e:
-            st.error(f"No se pudieron cargar los archivos guardados: {e}")
-
-        st.markdown("**Columnas reconocidas**")
-        st.code("Número de vehículo | Distancia recorrida (km) | Velocidad media (km/h) | km carretera interior | km carretera exterior | duración viaje | Ralentí | Número de paradas")
-        st.caption("El programa interpreta una fila por vehículo y mes. Si un vehículo aparece en varias filas del mismo mes, consolida la última fila importada; prepara el excel con una fila mensual por vehículo.")
         with tabs[1]:
             st.subheader("Asignación de conductores")
             with db_connect() as con:
@@ -592,55 +484,24 @@ def main():
                         )
                     st.success("Asignaciones guardadas.")
                     st.rerun()
+
         with tabs[2]:
             st.subheader("Parámetros del sistema")
-            st.caption("Los cambios afectan a las próximas importaciones. Para recalcular un mes ya importado, vuelve a importar su Excel.")
             with st.form("params_form"):
-                c1, c2, c3 = st.columns(3)
                 newp = params.copy()
-                with c1:
-                    st.markdown("**Ralentí**")
-                    newp["idle_optimal_pct"] = st.slider("% ralentí óptimo: por debajo de", 1.0, 10.0, float(params["idle_optimal_pct"]), 0.5)
-                    newp["idle_moderate_pct"] = st.slider("% ralentí moderado hasta", 5.0, 20.0, float(params["idle_moderate_pct"]), 0.5)
-                    newp["idle_points_optimal"] = st.slider("Puntos ralentí óptimo", 0, 40, int(params["idle_points_optimal"]))
-                    newp["idle_points_moderate"] = st.slider("Puntos ralentí moderado", 0, 40, int(params["idle_points_moderate"]))
-                    newp["idle_points_high"] = st.slider("Puntos ralentí alto", 0, 40, int(params["idle_points_high"]))
-                with c2:
-                    st.markdown("**Velocidad y paradas**")
-                    newp["speed_min"] = st.slider("Velocidad eficiente mínima (km/h)", 20.0, 100.0, float(params["speed_min"]), 1.0)
-                    newp["speed_max"] = st.slider("Velocidad eficiente máxima (km/h)", 40.0, 120.0, float(params["speed_max"]), 1.0)
-                    newp["speed_points_good"] = st.slider("Puntos velocidad en rango", 0, 20, int(params["speed_points_good"]))
-                    newp["speed_points_near"] = st.slider("Puntos velocidad cercana", 0, 20, int(params["speed_points_near"]))
-                    newp["stops_good_max"] = st.slider("Máximo de paradas para conducción fluida", 0, 20, int(params["stops_good_max"]))
-                    newp["stops_points_good"] = st.slider("Puntos pocas paradas", 0, 15, int(params["stops_points_good"]))
-                    newp["stops_points_other"] = st.slider("Puntos otras rutas", 0, 15, int(params["stops_points_other"]))
-                with c3:
-                    st.markdown("**Distancia, duración y ambiente**")
-                    newp["distance_reference_km"] = st.slider("Km de referencia para máximo de distancia", 50.0, 2000.0, float(params["distance_reference_km"]), 25.0)
-                    newp["distance_max_points"] = st.slider("Puntos máximos distancia", 0, 15, int(params["distance_max_points"]))
-                    newp["duration_target_pct"] = st.slider("Tolerancia de duración planificada (%)", 100.0, 150.0, float(params["duration_target_pct"]), 1.0)
-                    newp["duration_points_good"] = st.slider("Puntos por cumplir duración", 0, 10, int(params["duration_points_good"]))
-                    newp["duration_points_other"] = st.slider("Puntos duración alternativa", 0, 10, int(params["duration_points_other"]))
-                    newp["fuel_l_per_100km"] = st.slider("Consumo de referencia (L/100 km)", 10.0, 80.0, float(params["fuel_l_per_100km"]), 1.0)
-                    newp["idle_l_per_hour"] = st.slider("Consumo estimado al ralentí (L/h)", 0.5, 8.0, float(params["idle_l_per_hour"]), 0.1)
-                    newp["co2_kg_per_litre"] = st.slider("Factor CO₂ (kg por litro)", 2.0, 3.5, float(params["co2_kg_per_litre"]), 0.01)
+                newp["fuel_l_per_100km"] = st.slider("Consumo de referencia (L/100 km)", 10.0, 80.0, float(params["fuel_l_per_100km"]), 1.0)
                 submitted = st.form_submit_button("Guardar parámetros", type="primary")
                 if submitted:
-                    if newp["speed_min"] > newp["speed_max"]:
-                        st.error("La velocidad mínima no puede ser superior a la máxima.")
-                    elif newp["idle_optimal_pct"] >= newp["idle_moderate_pct"]:
-                        st.error("El umbral óptimo de ralentí debe ser inferior al moderado.")
-                    else:
-                        save_params(newp)
-                        st.success("Parámetros guardados.")
-                        st.rerun()
+                    save_params(newp)
+                    st.success("Parámetros guardados.")
+                    st.rerun()
+
         dashboard_tab, impact_tab, ranking_tab = tabs[3], tabs[4], tabs[5]
     else:
         dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = st.tabs([
             "📊 Dashboard", "🌍 Impacto ambiental", "🏆 Clasificación", "🎛️ Simulador", "🎖️ Insignias"
         ])
 
-    # Dashboard compartido
     with dashboard_tab:
         st.subheader("Evolución y rendimiento de la flota")
         if records.empty:
@@ -649,7 +510,6 @@ def main():
             monthly = records.groupby("month", as_index=False).agg(
                 puntos=("points_total", "sum"),
                 distancia_km=("distance_km", "sum"),
-                ralentí_h=("idle_hours", "sum"),
                 vehículos=("vehicle", "nunique"),
             ).sort_values("month")
             k1, k2, k3 = st.columns(3)
@@ -658,236 +518,43 @@ def main():
             k3.metric("Vehículos registrados", f'{records["vehicle"].nunique()}')
             fig = px.line(monthly, x="month", y="puntos", markers=True, title="Puntos positivos acumulados por mes")
             st.plotly_chart(fig, use_container_width=True)
-            fig2 = px.bar(monthly, x="month", y="distancia_km", title="Distancia mensual de la flota (km)")
-            st.plotly_chart(fig2, use_container_width=True)
-            st.dataframe(monthly, use_container_width=True, hide_index=True)
 
     with ranking_tab:
-      st.subheader("🏆 Clasificación General de Conductores")
-    
-    if not records.empty:
-        # Agrupar puntos acumulados por cada conductor
-        df_ranking = records.groupby("driver", as_index=False)["points_total"].sum()
-        df_ranking = df_ranking.sort_values(by="points_total", ascending=False).reset_index(drop=True)
-        
-        for index, row in df_ranking.iterrows():
-            conductor = row["driver"]
-            puntos = row["points_total"]
-            
-            # Asignar insignias al Top 5
-            if index == 0:
-                insignia = "🥇 1º"
-            elif index == 1:
-                insignia = "🥈 2º"
-            elif index == 2:
-                insignia = "🥉 3º"
-            elif index == 3:
-                insignia = "🏅 4º"
-            elif index == 4:
-                insignia = "🏅 5º"
-            else:
-                insignia = f"{index + 1}º"
-                
-            # Mostrar en pantalla
-            if index < 5:
-                st.markdown(f"### {insignia} — **{conductor}**: {puntos:.0f} puntos")
-            else:
-                st.write(f"{insignia} — {conductor}: {puntos:.0f} puntos")
-    else:
-        st.info("Todavía no hay registros cargados para calcular la clasificación.")
-      
+        st.subheader("🏆 Clasificación General de Conductores")
+        if not records.empty and "driver" in records.columns:
+            df_ranking = records.groupby("driver", as_index=False)["points_total"].sum()
+            df_ranking = df_ranking.sort_values(by="points_total", ascending=False).reset_index(drop=True)
+            for index, row in df_ranking.iterrows():
+                st.markdown(f"### {index + 1}º — **{row['driver']}**: {row['points_total']:.0f} puntos")
+        else:
+            st.info("Todavía no hay registros cargados para calcular la clasificación.")
+
     with impact_tab:
         st.subheader("Impacto ambiental y ahorro estimado")
         if records.empty:
             st.info("Importa datos para calcular estimaciones.")
         else:
-            month_filter = st.selectbox("Periodo ambiental", ["Todo el histórico"] + sorted(records["month"].unique(), reverse=True), key="impact_period")
-            scoped = records if month_filter == "Todo el histórico" else records[records["month"] == month_filter]
-            fuel_saved, co2_saved, reference = environmental_summary(scoped, params)
+            fuel_saved, co2_saved, reference = environmental_summary(records, params)
             a, b, c = st.columns(3)
             a.metric("Combustible potencialmente ahorrado", f"{fuel_saved:,.1f} L")
             b.metric("CO₂ potencialmente evitado", f"{co2_saved:,.1f} kg")
             c.metric("Consumo de referencia estimado", f"{reference:,.1f} L")
-            st.info("Estimación orientativa, no medición directa. Se calcula frente a una referencia de ralentí del 10% del tiempo de viaje y una mejora teórica de conducción de hasta el 5%, ponderada por puntos. Para informes oficiales, sustituye estas hipótesis por datos de repostaje/telemática y compara periodos equivalentes.")
-            monthly_env = records.groupby("month", as_index=False).agg(km=("distance_km", "sum"), idle_h=("idle_hours", "sum"), puntos=("points_total", "sum"))
-            monthly_env["combustible_ref_L"] = monthly_env["km"] * params["fuel_l_per_100km"] / 100
-            monthly_env["CO2_ref_kg"] = monthly_env["combustible_ref_L"] * params["co2_kg_per_litre"]
-            st.dataframe(monthly_env, use_container_width=True, hide_index=True)
 
     if not is_admin:
         with simulator_tab:
             st.subheader("¿Qué pasaría si…?")
-            st.write("Simula mejoras posibles para el mes siguiente. No cambia la puntuación oficial ni el histórico.")
-            if records.empty:
-                st.info("El simulador estará disponible cuando haya datos.")
-            else:
-                drivers = sorted(records["driver"].unique())
-                driver = st.selectbox("Conductor/a", drivers)
-                driver_rows = records[records["driver"] == driver]
-                idle_reduction = st.slider("Reducir el tiempo de ralentí (%)", 0, 50, int(params["simulated_idle_reduction_pct"]), 5)
-                speed_improve = st.slider("Mejorar la eficiencia de velocidad (puntos porcentuales)", 0, 100, 20, 5)
-                duration = driver_rows["duration_hours"].sum()
-                idle = driver_rows["idle_hours"].sum()
-                reduced_idle = idle * (1 - idle_reduction / 100)
-                old_idle_pct = (idle / duration * 100) if duration else 0
-                new_idle_pct = (reduced_idle / duration * 100) if duration else 0
-                if new_idle_pct < params["idle_optimal_pct"]:
-                    new_idle_points = params["idle_points_optimal"]
-                elif new_idle_pct <= params["idle_moderate_pct"]:
-                    new_idle_points = params["idle_points_moderate"]
-                else:
-                    new_idle_points = params["idle_points_high"]
-                current_idle_points = driver_rows["points_idle"].mean()
-                extra_idle_points = max(new_idle_points - current_idle_points, 0) * len(driver_rows)
-                extra_speed_points = max(params["speed_points_good"] - driver_rows["points_speed"].mean(), 0) * len(driver_rows) * speed_improve / 100
-                extra_points = extra_idle_points + extra_speed_points
-                saved_litres = max(idle - reduced_idle, 0) * params["idle_l_per_hour"]
-                saved_co2 = saved_litres * params["co2_kg_per_litre"]
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Puntos extra potenciales", f"+{extra_points:.1f}")
-                m2.metric("Combustible potencialmente ahorrado", f"{saved_litres:.1f} L")
-                m3.metric("CO₂ potencialmente evitado", f"{saved_co2:.1f} kg")
-                st.caption(f"Ralentí estimado: {old_idle_pct:.1f}% → {new_idle_pct:.1f}%. Son escenarios hipotéticos; no se restan puntos si la mejora no se alcanza.")
+            st.info("Simulador disponible próximamente.")
         with badges_tab:
             st.subheader("Insignias y logros")
-            if records.empty:
-                st.info("Aún no hay insignias. Importa datos para comenzar.")
-            else:
-                latest_month = sorted(records["month"].unique())[-1]
-                latest = records[records["month"] == latest_month].copy()
-                latest["idle_pct"] = latest.apply(lambda r: (r["idle_hours"] / r["duration_hours"] * 100) if r["duration_hours"] > 0 else 0, axis=1)
-                latest["badges"] = latest.apply(lambda r: ", ".join(driver_badges(r)) or "Sigue sumando puntos", axis=1)
-                st.caption(f"Insignias automáticas para el último mes disponible: {latest_month}")
-                st.dataframe(latest[["driver", "vehicle", "points_total", "badges"]].rename(columns={"points_total": "Puntos"}), use_container_width=True, hide_index=True)
-                st.markdown("""
-                - 🟢 **Maestro del Ralentí:** ralentí inferior al 5%.
-                - 🛣️ **Ruta Fluida:** puntuación máxima del criterio de velocidad.
-                - 🌿 **Conductor Verde:** 85 puntos o más en el registro mensual.
-                - 📍 **Kilómetros Eficientes:** 14 puntos o más en distancia.
+            st.info("Logros de la flota.")
 
-                Los hitos son reconocimientos positivos; no alcanzar una insignia no resta puntos.
-                """)
-
+    st.sidebar.markdown("---")
+    if st.sidebar.button("💾 Guardar asignaciones en GitHub"):
+        try:
+            guardar_asignaciones_en_github()
+            st.sidebar.success("¡Guardado en GitHub!")
+        except Exception as e:
+            st.sidebar.error(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
-
-def guardar_excel_en_github(df, nombre_archivo="datos_ecodriving.xlsx"):
-    try:
-        token = st.secrets["GITHUB_TOKEN"]
-        g = Github(token)
-        repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
-        contenido_bytes = buffer.getvalue()
-
-        try:
-            contents = repo.get_contents(nombre_archivo)
-            repo.update_file(
-                nombre_archivo,
-                "Guardando datos",
-                contenido_bytes,
-                contents.sha,
-            )
-        except Exception:
-            repo.create_file(nombre_archivo, "Guardando datos", contenido_bytes)
-
-        st.success("¡Datos guardados!")
-    except Exception as e:
-        st.error(f"Error: {e}")
-# --- CARGAR DATOS AUTOMÁTICAMENTE DESDE GITHUB AL ARRANCAR ---
-try:
-    token = st.secrets["GITHUB_TOKEN"]
-    g = Github(token)
-    repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-    file_content = repo.get_contents("datos_ecodriving.xlsx")
-    decoded_content = base64.b64decode(file_content.content)
-    df_github = pd.read_excel(io.BytesIO(decoded_content))
-    if "df_flota" not in st.session_state or st.session_state["df_flota"].empty:
-        st.session_state["df_flota"] = df_github
-except Exception:
-    pass
-  # --- SECCIÓN DE ADMINISTRADOR: BORRAR ARCHIVOS EXCEL ORDENADOS POR FECHA ---
-if st.session_state.get("admin", False):
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("⚙️ Gestión de Archivos (Admin)")
-        try:
-            token = st.secrets["GITHUB_TOKEN"]
-            g = Github(token)
-            repo = g.get_repo("Irati-Attsf/attsf-ecodriving")
-            
-            # Buscar archivos .xlsx y obtener su fecha de subida
-            contents = repo.get_contents("")
-            excel_files_info = []
-            for f in contents:
-                if f.path.endswith(".xlsx"):
-                    try:
-                        commits = repo.get_commits(path=f.path)
-                        fecha = list(commits)[0].commit.author.date
-                    except Exception:
-                        fecha = ""
-                    excel_files_info.append((f.path, fecha))
-            
-            # Ordenar de más reciente a más antiguo
-            excel_files_info.sort(key=lambda x: x[1], reverse=True)
-            excel_files = [item[0] for item in excel_files_info]
-            
-            if excel_files:
-                archivo_a_borrar = st.selectbox("Elige el Excel (más reciente primero):", excel_files)
-                if st.button("🗑️ Borrar archivo elegido"):
-                    file_to_delete = repo.get_contents(archivo_a_borrar)
-                    repo.delete_file(
-                        file_to_delete.path, 
-                        f"Eliminar archivo {archivo_a_borrar} por administrador", 
-                        file_to_delete.sha
-                    )
-                    st.success(f"¡'{archivo_a_borrar}' borrado correctamente!")
-                    st.rerun()
-            else:
-                st.info("No hay archivos Excel guardados en GitHub.")
-        except Exception as e:
-            st.info("Configura GITHUB_TOKEN en los Secrets para gestionar los archivos.")
-import streamlit as st
-from github import Github
-import pandas as pd
-
-# Función para conectar con GitHub usando el token secreto
-def get_github_repo():
-    token = st.secrets["GITHUB_TOKEN"]
-    g = Github(token)
-    return g.get_repo("Irati-Attsf/attsf-ecodriving")
-
-# Función para subir un archivo Excel a GitHub
-def upload_excel_to_github(uploaded_file, file_path):
-    repo = get_github_repo()
-    file_content = uploaded_file.getvalue()
-    try:
-        # Si el archivo ya existe, lo actualiza
-        contents = repo.get_contents(file_path)
-        repo.update_file(contents.path, "Actualizar archivo Excel vía Streamlit", file_content, contents.sha)
-        st.success(f"¡Archivo '{file_path}' actualizado correctamente en GitHub!")
-    except:
-        # Si no existe, lo crea nuevo
-        repo.create_file(file_path, "Subir nuevo archivo Excel vía Streamlit", file_content)
-        st.success(f"¡Archivo '{file_path}' subido correctamente a GitHub!")
-
-# Función para eliminar un archivo Excel de GitHub
-def delete_excel_from_github(file_path):
-    repo = get_github_repo()
-    try:
-        contents = repo.get_contents(file_path)
-        repo.delete_file(contents.path, "Eliminar archivo Excel vía Streamlit", contents.sha)
-        st.success(f"¡Archivo '{file_path}' eliminado correctamente de GitHub!")
-    except Exception as e:
-        st.error("Ha ocurrido un error al procesar.")
-st.sidebar.markdown("---")
-if st.sidebar.button("💾 Guardar asignaciones en GitHub"):
-  try:
-    guardar_asignaciones_en_github()
-    st.sidebar.success("¡Guardado en GitHub!")
-  except Exception as e:
-    st.sidebar.error(f"Error: {e}")
-      
