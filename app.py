@@ -499,16 +499,64 @@ def main():
                     st.success("Asignaciones guardadas.")
                     st.rerun()
 
-        with tabs[2]:
-            st.subheader("Parámetros del sistema")
+       with tabs[2]:
+            st.subheader("Parámetros del sistema y baremos de puntuación")
+            st.markdown("Modifica los umbrales y los puntos otorgados en cada categoría (el sistema opera exclusivamente sumando puntos).")
+            
             with st.form("params_form"):
                 newp = params.copy()
-                newp["fuel_l_per_100km"] = st.slider("Consumo de referencia (L/100 km)", 10.0, 80.0, float(params["fuel_l_per_100km"]), 1.0)
-                submitted = st.form_submit_button("Guardar parámetros", type="primary")
+                
+                st.markdown("#### 🟢 Ralentí")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    newp["idle_optimal_pct"] = st.number_input("Ralentí óptimo máx (%)", value=float(params["idle_optimal_pct"]), step=0.5)
+                    newp["idle_points_optimal"] = st.number_input("Puntos ralentí óptimo", value=float(params["idle_points_optimal"]), step=1.0)
+                with col2:
+                    newp["idle_moderate_pct"] = st.number_input("Ralentí moderado máx (%)", value=float(params["idle_moderate_pct"]), step=0.5)
+                    newp["idle_points_moderate"] = st.number_input("Puntos ralentí moderado", value=float(params["idle_points_moderate"]), step=1.0)
+                with col3:
+                    newp["idle_points_high"] = st.number_input("Puntos ralentí alto", value=float(params["idle_points_high"]), step=1.0)
+
+                st.markdown("#### 🛣️ Velocidad")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    newp["speed_min"] = st.number_input("Velocidad mín (km/h)", value=float(params["speed_min"]), step=1.0)
+                with col2:
+                    newp["speed_max"] = st.number_input("Velocidad máx (km/h)", value=float(params["speed_max"]), step=1.0)
+                with col3:
+                    newp["speed_points_good"] = st.number_input("Puntos velocidad óptima", value=float(params["speed_points_good"]), step=1.0)
+                with col4:
+                    newp["speed_points_near"] = st.number_input("Puntos velocidad cercana", value=float(params["speed_points_near"]), step=1.0)
+
+                st.markdown("#### 🛑 Paradas, Distancia y Duración")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    newp["stops_good_max"] = st.number_input("Máx paradas óptimas", value=float(params["stops_good_max"]), step=1.0)
+                    newp["stops_points_good"] = st.number_input("Puntos paradas óptimas", value=float(params["stops_points_good"]), step=1.0)
+                with col2:
+                    newp["stops_points_other"] = st.number_input("Puntos otras paradas", value=float(params["stops_points_other"]), step=1.0)
+                    newp["distance_reference_km"] = st.number_input("Km de referencia", value=float(params["distance_reference_km"]), step=10.0)
+                with col3:
+                    newp["distance_max_points"] = st.number_input("Puntos máx distancia", value=float(params["distance_max_points"]), step=1.0)
+                    newp["duration_target_pct"] = st.number_input("Duración objetivo (%)", value=float(params["duration_target_pct"]), step=1.0)
+                with col4:
+                    newp["duration_points_good"] = st.number_input("Puntos duración óptima", value=float(params["duration_points_good"]), step=1.0)
+                    newp["duration_points_other"] = st.number_input("Puntos otra duración", value=float(params.get("duration_points_other", 5.0)), step=1.0)
+
+                st.markdown("#### 🌍 Factores ambientales y consumo")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    newp["fuel_l_per_100km"] = st.number_input("Consumo referencia (L/100km)", value=float(params["fuel_l_per_100km"]), step=1.0)
+                with col2:
+                    newp["idle_l_per_hour"] = st.number_input("Consumo ralentí (L/h)", value=float(params["idle_l_per_hour"]), step=0.1)
+                with col3:
+                    newp["co2_kg_per_litre"] = st.number_input("CO2 (kg/litro)", value=float(params["co2_kg_per_litre"]), step=0.01)
+
+                submitted = st.form_submit_button("Guardar todos los parámetros", type="primary")
                 if submitted:
                     save_params(newp)
-                    st.success("Parámetros guardados.")
-                    st.rerun()
+                    st.success("¡Parámetros del sistema actualizados correctamente!")
+                    st.rerun() 
 
         dashboard_tab, impact_tab, ranking_tab = tabs[3], tabs[4], tabs[5]
     else:
