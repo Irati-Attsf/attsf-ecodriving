@@ -499,7 +499,7 @@ def main():
                     st.success("Asignaciones guardadas.")
                     st.rerun()
 
-       with tabs[2]:
+        with tabs[2]:
             st.subheader("Parámetros del sistema y baremos de puntuación")
             st.markdown("Modifica los umbrales y los puntos otorgados en cada categoría (el sistema opera exclusivamente sumando puntos).")
             
@@ -556,7 +556,7 @@ def main():
                 if submitted:
                     save_params(newp)
                     st.success("¡Parámetros del sistema actualizados correctamente!")
-                    st.rerun() 
+                    st.rerun()
 
         dashboard_tab, impact_tab, ranking_tab = tabs[3], tabs[4], tabs[5]
     else:
