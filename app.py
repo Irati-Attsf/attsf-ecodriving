@@ -558,18 +558,14 @@ def main():
                     st.success("¡Parámetros del sistema actualizados correctamente!")
                     st.rerun()
 
-    dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = st.tabs([
-        "📊 Dashboard", 
-        "🌍 Impacto ambiental", 
-        "🏆 Clasificación", 
-        "🎛️ Simulador", 
-        "🎖️ Insignias"
-    ])  
-    else:
-        dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = st.tabs([
-            "📊 Dashboard", "🌍 Impacto ambiental", "🏆 Clasificación", "🎛️ Simulador", "🎖️ Insignias"
-        ])
 
+       dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = st.tabs([
+           "📊 Dashboard", 
+           "🌍 Impacto ambiental", 
+           "🏆 Clasificación", 
+           "🎛️ Simulador", 
+           "🎖️ Insignias"
+       ])  
     with dashboard_tab:
         st.subheader("Evolución y rendimiento de la flota")
         if records.empty:
