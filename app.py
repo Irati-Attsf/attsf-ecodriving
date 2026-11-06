@@ -679,7 +679,7 @@ def main():
                         delta=f"+{total_co2_evitado * 0.17:.1f} kg vs base"
                     )
 
-        with badges_tab:
+    with badges_tab:
             st.subheader("🎖️ Insignias y logros de los conductores")
             if records.empty:
                 st.info("No hay datos de conducción registrados para mostrar insignias.")
