@@ -558,7 +558,7 @@ def main():
                     st.success("¡Parámetros del sistema actualizados correctamente!")
                     st.rerun()
 
-        dashboard_tab, impact_tab, ranking_tab = tabs[3], tabs[4], tabs[5]
+        dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = tabs[3], tabs[4], tabs[5], tabs[6], tabs[7]
     else:
         dashboard_tab, impact_tab, ranking_tab, simulator_tab, badges_tab = st.tabs([
             "📊 Dashboard", "🌍 Impacto ambiental", "🏆 Clasificación", "🎛️ Simulador", "🎖️ Insignias"
