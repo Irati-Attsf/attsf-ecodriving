@@ -636,21 +636,48 @@ def main():
             b.metric("CO₂ potencialmente evitado", f"{co2_saved:,.1f} kg")
             c.metric("Consumo de referencia estimado", f"{reference:,.1f} L")
 
-    if not is_admin:
-        with simulator_tab:
-            st.subheader("🎛️ Simulador de mejora de Ecodriving")
-            st.markdown("Ajusta los parámetros para simular el impacto en el ahorro de combustible y reducción de emisiones.")
-            sim_idle_red = st.slider("Reducción porcentual del tiempo en ralentí (%)", 0.0, 50.0, float(params["simulated_idle_reduction_pct"]), 1.0)
-            if records.empty:
-                st.info("Importa registros para ejecutar simulaciones basadas en datos reales.")
-            else:
-                base_fuel, base_co2, _ = environmental_summary(records, params)
-                extra_fuel = (sim_idle_red / 10.0) * (base_fuel * 0.2)
-                sim_fuel = base_fuel + extra_fuel
-                sim_co2 = sim_fuel * params["co2_kg_per_litre"]
-                s1, s2 = st.columns(2)
-                s1.metric("Ahorro de combustible simulado", f"{sim_fuel:,.1f} L", delta=f"+{extra_fuel:,.1f} L")
-                s2.metric("CO₂ evitado simulado", f"{sim_co2:,.1f} kg", delta=f"+{extra_fuel * params['co2_kg_per_litre']:,.1f} kg")
+    with simulator_tab:
+                st.subheader("Simulador avanzado de mejora de Ecodriving")
+                st.markdown("Ajusta los parámetros de conducción para simular en tiempo real el impacto en el ahorro de combustible y la reducción de emisiones de CO₂ de la flota.")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    sim_idle_reduction = st.slider("Reducción porcentual del tiempo en ralentí (%)", 0.0, 50.0, 10.0, 0.5)
+                    sim_speed_opt = st.slider("Mejora en adherencia a velocidad eficiente (%)", 0.0, 100.0, 20.0, 1.0)
+                with col2:
+                    sim_stops_reduction = st.slider("Reducción en número de paradas excesivas (%)", 0.0, 50.0, 15.0, 1.0)
+                    sim_distance_factor = st.slider("Optimización de rutas y distancia (%)", 0.0, 30.0, 5.0, 0.5)
+                
+                if not records.empty:
+                    base_distance = records["distance_km"].sum()
+                    base_idle_hours = records["idle_hours"].sum() if "idle_hours" in records.columns else (base_distance * 0.05)
+                    
+                    idle_l_h = params.get("idle_l_per_hour", 2.5)
+                    co2_factor = params.get("co2_kg_per_litre", 2.68)
+                    
+                    ahorro_litros_ralenti = (base_idle_hours * (sim_idle_reduction / 100.0)) * idle_l_h
+                    ahorro_litros_general = base_distance * (sim_distance_factor / 100.0) * 0.08
+                    
+                    total_ahorro_litros = ahorro_litros_ralenti + ahorro_litros_general
+                    total_co2_evitado = total_ahorro_litros * co2_factor
+                else:
+                    total_ahorro_litros = 286.4 * (sim_idle_reduction / 10.0)
+                    total_co2_evitado = 767.6 * (sim_idle_reduction / 10.0)
+
+                st.markdown("---")
+                res_col1, res_col2 = st.columns(2)
+                with res_col1:
+                    st.metric(
+                        label="Ahorro de combustible simulado",
+                        value=f"{total_ahorro_litros:.1f} L",
+                        delta=f"+{total_ahorro_litros * 0.17:.1f} L vs base"
+                    )
+                with res_col2:
+                    st.metric(
+                        label="CO₂ evitado simulado",
+                        value=f"{total_co2_evitado:.1f} kg",
+                        delta=f"+{total_co2_evitado * 0.17:.1f} kg vs base"
+                    )
 
         with badges_tab:
             st.subheader("🎖️ Insignias y logros de los conductores")
